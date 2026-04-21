@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Late Night Radio — Dual Track Player</title>
+    <meta
+      name="description"
+      content="A late-night radio styled web player with a looping time announcer that ducks your music queue."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- Grain / noise overlay -->
+    <div class="grain" aria-hidden="true"></div>
+
+    <main class="shell">
+      <!-- =================== HEADER =================== -->
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo-dot"></div>
+          <div>
+            <h1 class="brand-title">Late Night Radio</h1>
+            <p class="brand-sub">98.7 FM · Owl Hours Broadcast</p>
+          </div>
+        </div>
+
+        <div class="status-cluster">
+          <div class="live-pill" id="liveStatus">
+            <span class="live-dot"></span>
+            <span class="live-label">TIME LOOP</span>
+          </div>
+          <div class="onair-pill" id="onAirBadge" data-active="false">
+            <span class="onair-dot"></span>
+            <span>ON AIR</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- =================== MAIN GRID =================== -->
+      <section class="grid">
+        <!-- LEFT: Now playing / visualizer -->
+        <article class="card glass now-playing">
+          <div class="card-head">
+            <span class="kicker">Now Spinning</span>
+            <span class="mono" id="trackTime">00:00 / 00:00</span>
+          </div>
+
+          <h2 class="track-title" id="trackTitle">No track loaded</h2>
+          <p class="track-meta" id="trackMeta">Drop a file to begin transmission.</p>
+
+          <canvas id="visualizer" class="visualizer"></canvas>
+
+          <div class="progress" id="progressWrap">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+
+          <div class="transport">
+            <button class="btn ghost" id="skipBtn" title="Skip to next track" disabled>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M6 6h2v12H6zM9.5 12L18 6v12z" />
+              </svg>
+            </button>
+            <button class="btn primary" id="playBtn" title="Play / Pause" disabled>
+              <svg id="playIcon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <svg
+                id="pauseIcon"
+                viewBox="0 0 24 24"
+                width="26"
+                height="26"
+                fill="currentColor"
+                style="display: none"
+              >
+                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+              </svg>
+            </button>
+            <div class="vad-readout mono" id="vadReadout">VAD · 0.000</div>
+          </div>
+        </article>
+
+        <!-- RIGHT: Queue / Upload -->
+        <article class="card glass queue-card">
+          <div class="card-head">
+            <span class="kicker">Queue</span>
+            <span class="mono" id="queueCount">0 tracks</span>
+          </div>
+
+          <div class="dropzone" id="dropzone" tabindex="0">
+            <input type="file" id="fileInput" accept="audio/*" multiple hidden />
+            <div class="drop-inner">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <p class="drop-title">Drop audio here</p>
+              <p class="drop-sub">or <span class="link">browse files</span> · MP3, WAV, OGG</p>
+            </div>
+          </div>
+
+          <ul class="queue-list" id="queueList">
+            <li class="queue-empty">Queue is empty — your tracks will appear here.</li>
+          </ul>
+        </article>
+
+        <!-- BOTTOM: Mixer -->
+        <article class="card glass mixer">
+          <div class="card-head">
+            <span class="kicker">Mixer</span>
+            <span class="mono">2 CH</span>
+          </div>
+
+          <div class="channels">
+            <div class="channel">
+              <div class="channel-head">
+                <div>
+                  <p class="ch-label">CH&nbsp;A</p>
+                  <p class="ch-name">Time Announcer</p>
+                </div>
+                <span class="ch-value mono" id="volAValue">80</span>
+              </div>
+              <input
+                type="range"
+                id="volA"
+                min="0"
+                max="100"
+                value="80"
+                class="slider slider--amber"
+              />
+              <p class="ch-foot mono">LOOP · DUCK SOURCE</p>
+            </div>
+
+            <div class="channel">
+              <div class="channel-head">
+                <div>
+                  <p class="ch-label">CH&nbsp;B</p>
+                  <p class="ch-name">Music Queue</p>
+                </div>
+                <span class="ch-value mono" id="volBValue">70</span>
+              </div>
+              <input
+                type="range"
+                id="volB"
+                min="0"
+                max="100"
+                value="70"
+                class="slider slider--cream"
+              />
+              <p class="ch-foot mono"><span id="duckState">IDLE</span> · DUCK TARGET</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="foot mono">
+        <span>// signal stable</span>
+        <span id="clockReadout">--:--:--</span>
+      </footer>
+    </main>
+
+    <!-- Hidden audio elements -->
+    <audio id="audioA" src="./audio/timetrack.mp3" loop preload="auto" crossorigin="anonymous"></audio>
+    <audio id="audioB" preload="auto" crossorigin="anonymous"></audio>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
