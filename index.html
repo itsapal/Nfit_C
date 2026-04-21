@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>INGAFUTÁS Demo</title>
+    <title>Late Night Radio — Dual Track Player</title>
     <meta
       name="description"
       content="A late-night radio styled web player with a looping time announcer that ducks your music queue."
@@ -26,7 +26,7 @@
         <div class="brand">
           <div class="logo-dot"></div>
           <div>
-            <h1 class="brand-title">Ingafutás Demo</h1>
+            <h1 class="brand-title">Late Night Radio</h1>
           </div>
         </div>
 
@@ -110,6 +110,17 @@
           </ul>
         </article>
 
+        <article class="card glass presets-card">
+          <div class="card-head">
+            <span class="kicker">Presets</span>
+            <span class="mono" id="presetCount">0 presets</span>
+          </div>
+          <p class="preset-help mono">Load songs from `songs/&lt;preset-name&gt;/` folders.</p>
+          <div class="preset-list" id="presetList">
+            <p class="preset-empty mono">No preset folders found yet.</p>
+          </div>
+        </article>
+
         <!-- BOTTOM: Mixer -->
         <article class="card glass mixer">
           <div class="card-head">
@@ -157,6 +168,15 @@
             </div>
           </div>
         </article>
+
+        <article class="card glass time-counter">
+          <div class="card-head">
+            <span class="kicker">Timetrack Counter</span>
+            <span class="mono" id="counterStep">STEP · 7s</span>
+          </div>
+          <p class="counter-value" id="timeCounterValue">0</p>
+          <p class="counter-meta mono" id="counterMeta">NEXT · --:--:--</p>
+        </article>
       </section>
 
       <footer class="foot mono">
@@ -169,6 +189,7 @@
     <audio id="audioA" src="./audio/timetrack.mp3" loop preload="auto" crossorigin="anonymous"></audio>
     <audio id="audioB" preload="auto" crossorigin="anonymous"></audio>
 
+    <script src="./songs/presets.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

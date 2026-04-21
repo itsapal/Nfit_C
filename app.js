@@ -28,6 +28,8 @@
   const fileInput = document.getElementById("fileInput");
   const queueList = document.getElementById("queueList");
   const queueCount = document.getElementById("queueCount");
+  const presetList = document.getElementById("presetList");
+  const presetCount = document.getElementById("presetCount");
 
   const volA = document.getElementById("volA");
   const volB = document.getElementById("volB");
@@ -39,10 +41,15 @@
   const vadReadout = document.getElementById("vadReadout");
   const visualizer = document.getElementById("visualizer");
   const clockReadout = document.getElementById("clockReadout");
+  const timeCounterValue = document.getElementById("timeCounterValue");
+  const counterMeta = document.getElementById("counterMeta");
+  const counterStep = document.getElementById("counterStep");
 
   // ---------- State ----------
-  /** @type {{name:string,file:File,url:string}[]} */
+  /** @type {{name:string,url:string,objectUrl?:boolean}[]} */
   const queue = [];
+  /** @type {{name:string,tracks:{name:string,url:string}[]}[]} */
+  const presets = [];
   let currentIndex = -1; // index of the currently playing item in queue
   let isPlaying = false;
   let audioCtx = null;
@@ -54,6 +61,11 @@
   let isSpeaking = false;
   const VAD_THRESHOLD = 0.015;
   const DUCK_LEVEL = 0.15; // 15% of base
+  const COUNTER_FALLBACK_STEP_SECONDS = 7;
+  /** @type {number[]} */
+  let counterTimestamps = [];
+  let counterValue = 0;
+  let lastCounterSource = "";
   let userVolB = parseInt(volB.value, 10) / 100; // base level
   let userVolA = parseInt(volA.value, 10) / 100;
 
@@ -189,8 +201,58 @@
     for (const file of files) {
       if (!file.type.startsWith("audio/") && !/\.(mp3|wav|ogg|m4a|flac)$/i.test(file.name)) continue;
       const url = URL.createObjectURL(file);
-      queue.push({ name: file.name.replace(/\.[^.]+$/, ""), file, url });
+      queue.push({ name: file.name.replace(/\.[^.]+$/, ""), url, objectUrl: true });
       added.push(queue.length - 1);
+    }
+    renderQueue();
+    if (currentIndex === -1 && queue.length > 0) {
+      loadTrack(0);
+    }
+  }
+
+  function loadPresetManifest() {
+    presets.length = 0;
+    const source = Array.isArray(window.SONG_PRESETS) ? window.SONG_PRESETS : [];
+    for (const preset of source) {
+      if (!preset || typeof preset.name !== "string" || !Array.isArray(preset.tracks)) continue;
+      const tracks = preset.tracks
+        .filter((track) => track && typeof track.name === "string" && typeof track.url === "string")
+        .map((track) => ({ name: track.name, url: track.url }));
+      if (tracks.length === 0) continue;
+      tracks.sort((a, b) => a.name.localeCompare(b.name));
+      presets.push({ name: preset.name, tracks });
+    }
+    presets.sort((a, b) => a.name.localeCompare(b.name));
+    renderPresets();
+  }
+
+  function renderPresets() {
+    if (!presetList || !presetCount) return;
+    presetCount.textContent = `${presets.length} preset${presets.length === 1 ? "" : "s"}`;
+    if (presets.length === 0) {
+      presetList.innerHTML = `<p class="preset-empty mono">No preset folders found yet.</p>`;
+      return;
+    }
+
+    presetList.innerHTML = "";
+    presets.forEach((preset, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset-btn";
+      btn.dataset.presetIndex = String(idx);
+      btn.innerHTML = `
+        <span class="preset-name">${escapeHtml(preset.name)}</span>
+        <span class="preset-meta mono">${preset.tracks.length} track${preset.tracks.length === 1 ? "" : "s"} · Add to queue</span>
+      `;
+      presetList.appendChild(btn);
+    });
+  }
+
+  function addPresetToQueue(presetIndex) {
+    const preset = presets[presetIndex];
+    if (!preset || preset.tracks.length === 0) return;
+    for (const track of preset.tracks) {
+      queue.push({ name: track.name, url: track.url });
     }
     renderQueue();
     if (currentIndex === -1 && queue.length > 0) {
@@ -242,7 +304,7 @@
     if (idx === currentIndex) {
       // Stop and try to advance
       audioB.pause();
-      URL.revokeObjectURL(item.url);
+      if (item.objectUrl) URL.revokeObjectURL(item.url);
       queue.splice(idx, 1);
       if (queue.length === 0) {
         currentIndex = -1;
@@ -258,7 +320,7 @@
         if (isPlaying) playB();
       }
     } else {
-      URL.revokeObjectURL(item.url);
+      if (item.objectUrl) URL.revokeObjectURL(item.url);
       queue.splice(idx, 1);
       if (idx < currentIndex) currentIndex--;
     }
@@ -324,6 +386,7 @@
     if (!audioB.duration) return;
     progressBar.style.width = `${(audioB.currentTime / audioB.duration) * 100}%`;
     trackTime.textContent = `${fmt(audioB.currentTime)} / ${fmt(audioB.duration)}`;
+    updateCounterFromTime(audioA.currentTime);
   });
   audioB.addEventListener("play", () => setPlayingUI(true));
   audioB.addEventListener("pause", () => {
@@ -383,9 +446,27 @@
     if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
   });
 
+  presetList?.addEventListener("click", (e) => {
+    const target = e.target instanceof Element ? e.target.closest("[data-preset-index]") : null;
+    if (!(target instanceof HTMLElement)) return;
+    const presetIndex = Number.parseInt(target.dataset.presetIndex ?? "", 10);
+    if (!Number.isFinite(presetIndex)) return;
+    addPresetToQueue(presetIndex);
+  });
+
   // Prevent the page from accepting unrelated drops
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
+
+  audioA.addEventListener("timeupdate", () => {
+    updateCounterFromTime(audioA.currentTime);
+  });
+  audioA.addEventListener("loadedmetadata", () => {
+    buildFallbackCounterTimes();
+  });
+  audioA.addEventListener("seeked", () => {
+    updateCounterFromTime(audioA.currentTime);
+  });
 
   // Clock
   function tickClock() {
@@ -396,12 +477,91 @@
   tickClock();
   setInterval(tickClock, 1000);
 
+  loadPresetManifest();
+  loadCounterTimes().finally(() => {
+    updateCounterFromTime(audioA.currentTime || 0);
+  });
+
   // ---------- Helpers ----------
+  async function loadCounterTimes() {
+    try {
+      const response = await fetch("./audio/timetrack-times.txt", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Failed to fetch timings: ${response.status}`);
+      const text = await response.text();
+      const parsed = parseCounterTimestamps(text);
+      if (parsed.length > 0) {
+        counterTimestamps = parsed;
+        lastCounterSource = "file";
+        counterStep.textContent = "STEP · FILE";
+        return;
+      }
+    } catch (err) {
+      console.warn("Using fallback timetrack counter timing:", err);
+    }
+    buildFallbackCounterTimes();
+  }
+
+  function buildFallbackCounterTimes() {
+    const duration = Number.isFinite(audioA.duration) ? audioA.duration : 0;
+    const upperBound = duration > 0 ? duration : 60 * 60;
+    const steps = [];
+    for (let t = COUNTER_FALLBACK_STEP_SECONDS; t <= upperBound; t += COUNTER_FALLBACK_STEP_SECONDS) {
+      steps.push(t);
+    }
+    counterTimestamps = steps;
+    lastCounterSource = "fallback";
+    counterStep.textContent = `STEP · ${COUNTER_FALLBACK_STEP_SECONDS}s`;
+  }
+
+  function parseCounterTimestamps(rawText) {
+    const out = [];
+    const lines = rawText.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const parts = trimmed.split(":").map((part) => part.trim());
+      if (parts.length !== 3) continue;
+      const h = Number.parseInt(parts[0], 10);
+      const m = Number.parseInt(parts[1], 10);
+      const s = Number.parseInt(parts[2], 10);
+      if (![h, m, s].every(Number.isFinite)) continue;
+      const total = h * 3600 + m * 60 + s;
+      if (total >= 0) out.push(total);
+    }
+    out.sort((a, b) => a - b);
+    return out;
+  }
+
+  function updateCounterFromTime(seconds) {
+    const currentTime = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    if (counterTimestamps.length === 0 && lastCounterSource !== "fallback") {
+      buildFallbackCounterTimes();
+    }
+    let count = 0;
+    while (count < counterTimestamps.length && currentTime >= counterTimestamps[count]) {
+      count++;
+    }
+    counterValue = count;
+    timeCounterValue.textContent = String(counterValue);
+    const nextTime = counterTimestamps[counterValue];
+    counterMeta.textContent =
+      typeof nextTime === "number" ? `NEXT · ${fmtHMS(nextTime)}` : "NEXT · END OF TRACK";
+  }
+
   function fmt(t) {
     if (!isFinite(t)) return "00:00";
     const m = Math.floor(t / 60);
     const s = Math.floor(t % 60);
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+
+  function fmtHMS(t) {
+    if (!isFinite(t)) return "--:--:--";
+    const total = Math.floor(Math.max(0, t));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
   function escapeHtml(s) {
