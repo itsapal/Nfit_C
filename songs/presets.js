@@ -12,6 +12,7 @@ window.SONG_PRESETS = [
     tracks: [
       { name: "Napkeltéig Csoszogós Fóti Coronita Mix ft Brendo KLICKAUD", url: "./songs/vadulos-coro/Napkeltéig_Csoszogós_Fóti_Coronita_Mix_ft_Brendon_KLICKAUD.mp3" },
       { name: "3 Juliusi Ciganynak Nagykorú Coronita Mix (ft. Brendon)", url: "./songs/vadulos-coro/3 Juliusi Ciganynak_ Nagykorú Coronita Mix (ft. Brendon)-1989056286.mp3" },
+      { name: "Kukáskocsit Felborítós Kristályos Mix", url: "./songs/vadulos-coro/Kukáskocsit Felborítós Kristályos Mix-2027282660.mp3" },
     ],
   }
 ];
